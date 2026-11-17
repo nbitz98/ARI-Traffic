@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101614">
+<title>ARI Traffic</title>
+<style>
+:root{
+  --bg:#eef2f0; --surface:#ffffff; --surface-2:#f4f6f5; --fg:#15201c; --muted:#56635e; --line:#d3dbd8; --ink:#1f3f8f;
+  --me:#d11f5a; --ac:#1f3f8f; --near:#c47c00; --close:#c8261d; --stale:#8a9490; --grid:#c9d3cf;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#18201d; --surface-2:#1f2925; --fg:#e4ebe8; --muted:#9aa7a2; --line:#2e3a36; --ink:#9db4ff;
+  --me:#ff5c8f; --ac:#8fb0ff; --near:#f0b429; --close:#ff6a5e; --stale:#7d8884; --grid:#2a3531; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#18201d; --surface-2:#1f2925; --fg:#e4ebe8; --muted:#9aa7a2; --line:#2e3a36; --ink:#9db4ff;
+  --me:#ff5c8f; --ac:#8fb0ff; --near:#f0b429; --close:#ff6a5e; --stale:#7d8884; --grid:#2a3531; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.4 var(--font);overflow:hidden}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+.mapwrap{position:relative;flex:1;min-height:0;background:var(--surface)}
+svg#map{width:100%;height:100%;display:block;touch-action:none;user-select:none;cursor:grab}
+svg#map.dragging{cursor:grabbing}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #base{filter:brightness(.8) saturate(.9)}}
+:root[data-theme="dark"] #base{filter:brightness(.8) saturate(.9)}
+#base{opacity:.8}
+.grid line{stroke:var(--grid);stroke-width:1;vector-effect:non-scaling-stroke}
+.bline{stroke:var(--fg);stroke-width:1.6;vector-effect:non-scaling-stroke;stroke-dasharray:6 5;opacity:.75}
+.bline.near{stroke:var(--near);opacity:.95}.bline.close{stroke:var(--close);opacity:1;stroke-width:2.2}
+.blabel{font:600 11px var(--mono);fill:var(--fg);paint-order:stroke;stroke:var(--surface);stroke-width:3.5px;stroke-linejoin:round}
+.blabel.near{fill:var(--near)}.blabel.close{fill:var(--close)}
+.ac path.body{fill:var(--ac);stroke:var(--surface);stroke-width:1.5}
+.ac.near path.body{fill:var(--near)}.ac.close path.body{fill:var(--close)}.ac.stale path.body{fill:var(--stale)}
+.ac path.vec{stroke:var(--ac);stroke-width:1.5;fill:none}
+.ac.near path.vec{stroke:var(--near)}.ac.close path.vec{stroke:var(--close)}
+.ac text{font:600 10.5px var(--mono);fill:var(--fg);paint-order:stroke;stroke:var(--surface);stroke-width:3px;stroke-linejoin:round}
+.ac.stale text{fill:var(--stale)}
+.me circle.acc{fill:var(--me);fill-opacity:.12;stroke:var(--me);stroke-opacity:.5;stroke-width:1;vector-effect:non-scaling-stroke}
+.me circle.dot{fill:var(--me);stroke:#fff;stroke-width:2.5}
+.ring{fill:none;stroke:var(--me);stroke-opacity:.35;stroke-width:1;stroke-dasharray:3 4;vector-effect:non-scaling-stroke}
+.ringlabel{font:10px var(--mono);fill:var(--me);opacity:.8;paint-order:stroke;stroke:var(--surface);stroke-width:3px}
+.top{position:absolute;top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px;align-items:flex-start;pointer-events:none}
+.top > *{pointer-events:auto}
+.status{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:12px var(--mono);color:var(--muted);flex:1;min-width:0}
+.status b{color:var(--fg);font-family:var(--font);font-size:14px;margin-right:6px}
+.status .warn{color:var(--close)}
+.btns{display:flex;flex-direction:column;gap:6px}
+button{font:600 13px var(--font);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;min-width:42px;min-height:42px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.sheet{background:var(--surface);border-top:1px solid var(--line);max-height:44vh;min-height:0;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}
+.sheet.collapsed .list,.sheet.collapsed .opts{display:none}
+.sheethead{display:flex;align-items:center;gap:8px;padding:8px 12px;border:0;border-radius:0;background:none;width:100%;text-align:left;min-height:40px}
+.sheethead .sub{margin-left:auto;font:12px var(--mono);color:var(--muted);font-weight:400}
+.opts{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:0 12px 8px;font-size:12.5px;color:var(--muted)}
+.opts select{font:13px var(--font);padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}
+.opts label{display:flex;gap:6px;align-items:center}
+.opts input[type=checkbox]{width:18px;height:18px;accent-color:var(--ink)}
+.list{overflow:auto;border-top:1px solid var(--line);min-height:0;flex:1}
+@media (max-width:600px){.opts{font-size:12px;gap:4px 10px}.opts select{padding:4px}.sheethead{padding:6px 12px}th:nth-child(5),td:nth-child(5){display:none}td,th{padding:6px}}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-size:13px}
+th{font-size:11px;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
+td.id{font-weight:600}
+td .t{display:block;font-size:11px;color:var(--muted);font-weight:400}
+tr.near td.rng{color:var(--near);font-weight:700}tr.close td.rng{color:var(--close);font-weight:700}
+tr.stale td{color:var(--stale)}
+tr{cursor:pointer}
+.note{font-size:11px;color:var(--muted);padding:6px 12px 8px;line-height:1.35}
+.note a{color:var(--ink)}
+.banner{position:absolute;left:8px;right:8px;bottom:8px;background:#fff4d6;color:#6b4800;border-radius:8px;padding:10px 12px;font-size:13px;display:none}
+.banner.on{display:block}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="mapwrap" id="mapwrap">
+    <svg id="map" role="img" aria-label="Sectional chart with nearby aircraft and bearing and range lines from your position">
+      <g id="view"><g id="base"></g><g class="grid" id="grid"></g><g id="rings"></g><g id="lines"></g><g id="acs"></g><g id="me"></g><g id="labels"></g></g>
+    </svg>
+    <div class="top">
+      <div class="status" id="status"><b>ARI Traffic</b><span id="st">Starting&hellip;</span></div>
+      <div class="btns">
+        <button type="button" id="follow" aria-pressed="true" aria-label="Center on my position">&#8982;</button>
+        <button type="button" id="zin" aria-label="Zoom in">+</button>
+        <button type="button" id="zout" aria-label="Zoom out">&minus;</button>
+      </div>
+    </div>
+    <div class="banner" id="banner"></div>
+  </div>
+  <div class="sheet" id="sheet">
+    <button type="button" class="sheethead" id="sheethead" aria-expanded="true"><span id="count">Aircraft</span><span class="sub" id="feedage"></span></button>
+    <div class="opts">
+      <label>Range <select id="radius"><option value="10">10 NM</option><option value="25" selected>25 NM</option><option value="50">50 NM</option></select></label>
+      <label><input type="checkbox" id="lines" checked> Lines</label>
+      <label><input type="checkbox" id="ground"> On ground</label>
+      <label><input type="checkbox" id="wake"> Keep screen on</label>
+    </div>
+    <div class="list"><table><thead><tr><th>Aircraft</th><th>Range / brg</th><th>Altitude</th><th>Speed</th><th>Age</th></tr></thead><tbody id="rows"></tbody></table>
+    <p class="note">Planning and awareness aid only, not for navigation or collision avoidance. Internet ADS-B data is delayed, thin at low altitude, and does not show aircraft that are not broadcasting. Positions are projected forward from the last report for up to 15 s. Bearings are true. Altitudes are pressure altitude from the aircraft. Red: within 3 NM and 2,000 ft of you; amber: within 6 NM. Aircraft data: <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a>. Chart: FAA sectionals, 29 Oct&ndash;24 Dec 2026.</p></div>
+  </div>
+</div>
+<script>
+const TL = {"T":512,"K":0.8763066800438636,"lon_o":-100.0,"lat_o":32.0,"levels":{"0":325,"1":650,"2":1300,"3":2600},"tiles":{"0":[[0,1],[1,2],[1,1],[0,2],[1,0],[2,0],[0,3],[1,3]],"1":[[2,4],[3,4],[1,5],[3,1],[1,4],[2,3],[3,3],[2,5],[1,3],[3,5],[4,1],[2,7],[3,7],[1,7],[2,6],[3,6],[1,6]],"2":[[4,9],[3,7],[4,6],[3,10],[5,7],[5,10],[2,8],[6,8],[3,9],[5,6],[4,8],[3,6],[5,9],[2,7],[2,10],[6,7],[6,10],[4,7],[4,10],[3,8],[5,8],[2,9],[2,6],[6,6],[6,9],[8,3],[7,7],[7,10],[8,2],[7,3],[7,9],[7,6],[7,2],[7,8],[6,12],[6,15],[4,12],[5,13],[4,15],[3,13],[2,11],[2,14],[6,11],[6,14],[7,13],[3,12],[4,14],[4,11],[3,15],[5,12],[5,15],[2,13],[6,13],[7,12],[7,15],[3,11],[3,14],[5,11],[4,13],[5,14],[2,12],[2,15],[7,11],[7,14]],"3":[[6,18],[7,17],[8,18],[9,17],[11,14],[9,19],[11,16],[10,20],[13,19],[12,20],[5,14],[7,14],[5,16],[4,18],[9,14],[10,15],[7,16],[5,18],[9,16],[10,17],[10,19],[11,18],[6,15],[12,19],[4,15],[8,15],[11,20],[6,17],[4,17],[8,17],[10,14],[7,18],[10,16],[9,18],[11,15],[10,18],[9,20],[11,17],[13,20],[6,14],[4,14],[5,15],[8,14],[11,19],[6,16],[7,15],[4,16],[5,17],[8,16],[9,15],[15,5],[15,7],[16,6],[14,5],[15,6],[16,5],[14,7],[16,7],[14,6],[7,26],[12,25],[9,26],[11,23],[10,27],[13,26],[7,28],[12,27],[9,28],[10,29],[13,28],[7,30],[12,29],[9,21],[8,25],[13,21],[13,30],[7,23],[8,27],[10,24],[13,23],[12,24],[8,29],[10,26],[11,25],[12,26],[10,28],[9,30],[11,27],[12,28],[8,24],[10,21],[9,23],[10,30],[11,29],[7,25],[12,21],[12,30],[8,26],[10,23],[9,25],[13,25],[7,27],[12,23],[8,28],[10,25],[9,27],[11,24],[13,27],[7,29],[8,30],[9,29],[11,26],[13,29],[8,23],[11,28],[7,24],[9,24],[11,21],[11,30],[13,24]]}};
+const S = 1000, K = TL.K, P = (lon, lat) => [lon * K * S, -lat * S];
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t, a = {}, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const $ = id => document.getElementById(id);
+const svg = $('map'), gB = $('base'), gG = $('grid'), gR = $('rings'), gLn = $('lines'), gA = $('acs'), gM = $('me'), gLb = $('labels');
+const R2D = 180 / Math.PI, D2R = Math.PI / 180;
+// great-circle range (NM) and initial true bearing
+function rngBrg(la1, lo1, la2, lo2) { const p1 = la1 * D2R, p2 = la2 * D2R, dl = (lo2 - lo1) * D2R;
+  const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  const d = 2 * Math.asin(Math.min(1, Math.sqrt(a))) * 3440.065;
+  const b = (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) * R2D + 360) % 360;
+  return [d, b]; }
+function project(la, lo, brg, nm) { const d = nm / 3440.065, b = brg * D2R, p1 = la * D2R, l1 = lo * D2R;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+  const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2)); return [p2 * R2D, l2 * R2D]; }
+
+// ---- view
+let vb = {x: 0, y: 0, w: 1, h: 1};
+const px = () => { const r = svg.getBoundingClientRect(); return {w: r.width || 1, h: r.height || 1}; };
+function centerOn(lat, lon, spanNm) { const {w, h} = px(); const [cx, cy] = P(lon, lat);
+  let ww = vb.w, hh = vb.h; if (spanNm) { hh = spanNm / 60 * S * 2; ww = hh * w / h; } vb = {x: cx - ww / 2, y: cy - hh / 2, w: ww, h: hh}; draw(); }
+function zoomAt(f, cx, cy) { vb = {x: cx - (cx - vb.x) * f, y: cy - (cy - vb.y) * f, w: vb.w * f, h: vb.h * f}; draw(); }
+const toSvg = (x, y) => { const r = svg.getBoundingClientRect(); return [vb.x + (x - r.left) / r.width * vb.w, vb.y + (y - r.top) / r.height * vb.h]; };
+$('zin').onclick = () => zoomAt(0.6, vb.x + vb.w / 2, vb.y + vb.h / 2);
+$('zout').onclick = () => zoomAt(1 / 0.6, vb.x + vb.w / 2, vb.y + vb.h / 2);
+svg.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = toSvg(e.clientX, e.clientY); zoomAt(Math.exp(e.deltaY * 0.0015), x, y); }, {passive: false});
+const ptrs = new Map(); let drag = null, pinch = null;
+svg.addEventListener('pointerdown', e => { svg.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  if (ptrs.size === 1) drag = {x: e.clientX, y: e.clientY, vb: {...vb}, moved: 0};
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d: Math.hypot(a[0] - b[0], a[1] - b[1]), vb: {...vb}}; drag = null; } });
+svg.addEventListener('pointermove', e => { if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]); const r = svg.getBoundingClientRect();
+  if (pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const f = pinch.d / Math.max(10, Math.hypot(a[0] - b[0], a[1] - b[1]));
+    const cx = pinch.vb.x + ((a[0] + b[0]) / 2 - r.left) / r.width * pinch.vb.w, cy = pinch.vb.y + ((a[1] + b[1]) / 2 - r.top) / r.height * pinch.vb.h;
+    vb = {x: cx - (cx - pinch.vb.x) * f, y: cy - (cy - pinch.vb.y) * f, w: pinch.vb.w * f, h: pinch.vb.h * f}; draw(); return; }
+  if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+  if (drag.moved > 4) { if (follow) setFollow(false); svg.classList.add('dragging'); vb = {...drag.vb, x: drag.vb.x - dx / r.width * vb.w, y: drag.vb.y - dy / r.height * vb.h}; draw(); } });
+const endPtr = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) { drag = null; svg.classList.remove('dragging'); } };
+svg.addEventListener('pointerup', endPtr); svg.addEventListener('pointercancel', endPtr);
+new ResizeObserver(() => draw()).observe(svg);
+
+// ---- chart tiles
+const shown = new Map();
+function drawBase(u) {
+  const lv = Object.keys(TL.levels).map(Number).sort((a, b) => a - b); let target = lv[lv.length - 1];
+  for (const L of lv) { if (S / TL.levels[L] <= u * 1.6) { target = L; break; } }
+  const want = new Set(), ox = TL.lon_o * TL.K * S, oy = -TL.lat_o * S;
+  for (const L of lv) { if (L > target) break; const sz = TL.T * S / TL.levels[L];
+    for (const [tx, ty] of TL.tiles[L]) { const x = ox + tx * sz, y = oy + ty * sz;
+      if (x > vb.x + vb.w || x + sz < vb.x || y > vb.y + vb.h || y + sz < vb.y) continue;
+      const k = `${L}-${tx}-${ty}`; want.add(k);
+      if (!shown.has(k)) shown.set(k, el('image', {href: `tiles/${k}.jpg`, x, y, width: sz * 1.002, height: sz * 1.002, preserveAspectRatio: 'none'})); } }
+  for (const [k, im] of shown) if (!want.has(k)) { im.remove(); shown.delete(k); }
+  [...want].sort((a, b) => +a.split('-')[0] - +b.split('-')[0]).forEach(k => gB.appendChild(shown.get(k)));
+}
+for (let lat = 24; lat <= 33; lat += 0.5) { const [x1, y] = P(-101, lat), [x2] = P(-93, lat); el('line', {x1, y1: y, x2, y2: y}, gG); }
+for (let lon = -101; lon <= -93; lon += 0.5) { const [x, y1] = P(lon, 33), [, y2] = P(lon, 24); el('line', {x1: x, y1, x2: x, y2}, gG); }
+
+// ---- state
+let me = null, follow = true, firstFix = false, AC = [], fetchedAt = 0, feedErr = '', feedName = '';
+const opt = {radius: 25, lines: true, ground: false};
+try { const o = JSON.parse(localStorage.getItem('ari-traffic') || '{}'); Object.assign(opt, o); } catch (e) {}
+$('radius').value = String(opt.radius); $('lines').checked = opt.lines; $('ground').checked = opt.ground;
+const save = () => { try { localStorage.setItem('ari-traffic', JSON.stringify(opt)); } catch (e) {} };
+$('radius').onchange = e => { opt.radius = +e.target.value; save(); poll(true); };
+$('lines').onchange = e => { opt.lines = e.target.checked; save(); draw(); };
+$('ground').onchange = e => { opt.ground = e.target.checked; save(); draw(); };
+function setFollow(on) { follow = on; $('follow').setAttribute('aria-pressed', on); if (on && me) centerOn(me.lat, me.lon); }
+$('follow').onclick = () => setFollow(true);
+$('sheethead').onclick = () => { const s = $('sheet'); const c = s.classList.toggle('collapsed'); $('sheethead').setAttribute('aria-expanded', !c); };
+function banner(t) { const b = $('banner'); b.textContent = t || ''; b.classList.toggle('on', !!t); }
+
+// ---- location
+if ('geolocation' in navigator) navigator.geolocation.watchPosition(p => {
+  me = {lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, altFt: p.coords.altitude != null ? p.coords.altitude * 3.28084 : null, t: p.timestamp};
+  banner(''); if (!firstFix) { firstFix = true; centerOn(me.lat, me.lon, opt.radius * 0.6); poll(true); } else if (follow) centerOn(me.lat, me.lon); else draw();
+}, err => { banner(err.code === 1 ? 'Location is blocked. Allow location for this site in your browser settings, then reload. Without it, the map shows traffic around the map center and draws no bearing lines.' : 'Waiting for a GPS fix (' + err.message + ').'); if (!firstFix) startNoFix(); },
+  {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000});
+else { banner('This browser does not provide location.'); startNoFix(); }
+let noFixStarted = false;
+function startNoFix() { if (noFixStarted || firstFix) return; noFixStarted = true; if (vb.w <= 1) centerOn(27.7723, -97.5024, 25); poll(true); }
+setTimeout(() => { if (!firstFix) startNoFix(); }, 8000);
+
+// ---- traffic feed (airplanes.live; adsb.lol as backup, same response format)
+const FEEDS = [
+  {name: 'airplanes.live', url: (la, lo, r) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
+  {name: 'adsb.lol', url: (la, lo, r) => `https://api.adsb.lol/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
+];
+let feedIdx = 0, timer = null, busy = false;
+function queryPoint() { if (me) return [me.lat, me.lon]; const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2; return [-cy / S, cx / (K * S)]; }
+async function poll(now) {
+  clearTimeout(timer); if (busy) { timer = setTimeout(poll, 1000); return; }
+  if (document.hidden) { timer = setTimeout(poll, 5000); return; }
+  if (!firstFix && !noFixStarted) { timer = setTimeout(poll, 1000); return; }
+  busy = true; const [la, lo] = queryPoint();
+  for (let tries = 0; tries < FEEDS.length; tries++) { const f = FEEDS[feedIdx];
+    try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(f.url(la, lo, opt.radius), {signal: ctl.signal, cache: 'no-store'}); clearTimeout(to);
+      if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); fetchedAt = Date.now(); feedErr = ''; feedName = f.name;
+      AC = (j.ac || j.aircraft || []).filter(a => isFinite(a.lat) && isFinite(a.lon)).map(a => ({...a, _t: fetchedAt}));
+      break; }
+    catch (e) { feedErr = `${f.name}: ${e.name === 'AbortError' ? 'timed out' : e.message}`; feedIdx = (feedIdx + 1) % FEEDS.length; } }
+  busy = false; draw(); timer = setTimeout(poll, 5000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });
+
+// ---- wake lock
+let lock = null;
+$('wake').onchange = async e => { try { if (e.target.checked) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { if (!document.hidden) $('wake').checked = false; }); } else if (lock) { await lock.release(); lock = null; } } catch (err) { e.target.checked = false; banner('Keep screen on is not supported in this browser.'); setTimeout(() => banner(''), 4000); } };
+document.addEventListener('visibilitychange', async () => { if (!document.hidden && $('wake').checked && !lock) { try { lock = await navigator.wakeLock.request('screen'); } catch (e) {} } });
+
+// ---- draw
+const fmtAlt = a => a === 'ground' ? 'GND' : a == null ? '—' : Math.round(a).toLocaleString();
+function acNow(a) { // dead-reckon from last position for up to 15 s
+  const age = (a.seen_pos ?? a.seen ?? 0) + (Date.now() - a._t) / 1000; let lat = a.lat, lon = a.lon;
+  if (a.gs != null && a.track != null && a.alt_baro !== 'ground') { const dt = Math.min(age, 15); [lat, lon] = project(a.lat, a.lon, a.track, a.gs * dt / 3600); }
+  return {lat, lon, age}; }
+function draw() {
+  const {w} = px(); svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); const u = vb.w / w; drawBase(u);
+  [gR, gLn, gA, gM, gLb].forEach(g => g.replaceChildren());
+  // me
+  if (me) { const [x, y] = P(me.lon, me.lat);
+    el('circle', {cx: x, cy: y, r: Math.max(me.acc / 1852 / 60 * S, 0), class: 'acc'}, gM).classList.add('acc');
+    el('circle', {cx: x, cy: y, r: 7 * u, class: 'dot', 'stroke-width': 2.5 * u}, gM).classList.add('dot'); gM.setAttribute('class', 'me');
+    [5, 10].forEach(nm => { const [la2] = project(me.lat, me.lon, 0, nm); const rr = (la2 - me.lat) * S; el('circle', {cx: x, cy: y, r: rr, class: 'ring'}, gR);
+      const t = el('text', {x: x + 4 * u, y: y - rr - 3 * u, class: 'ringlabel', 'font-size': 10 * u, 'stroke-width': 3 * u}, gLb); t.textContent = nm + ' NM'; }); }
+  // aircraft
+  const rows = [], mx = me ? P(me.lon, me.lat) : null;
+  AC.forEach(a => { if (a.alt_baro === 'ground' && !opt.ground) return;
+    const n = acNow(a), [x, y] = P(n.lon, n.lat), stale = n.age > 20;
+    let rb = null, cls = ''; if (me) { rb = rngBrg(me.lat, me.lon, n.lat, n.lon);
+      const alt = typeof a.alt_baro === 'number' ? a.alt_baro : null, dv = alt != null && me.altFt != null ? Math.abs(alt - me.altFt) : null;
+      if (rb[0] <= 3 && (dv == null || dv <= 2000)) cls = 'close'; else if (rb[0] <= 6) cls = 'near'; }
+    if (stale) cls = 'stale';
+    const id = (a.flight || '').trim() || a.r || a.hex?.toUpperCase();
+    rows.push({a, n, rb, cls, id, x, y});
+    const onScreen = x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h;
+    const rbTxt = rb ? `${String(Math.round(rb[1]) % 360).padStart(3, '0')}° ${rb[0] < 10 ? rb[0].toFixed(1) : Math.round(rb[0])} NM` : '';
+    let rbOnAc = false;
+    if (me && opt.lines && onScreen) { el('line', {x1: mx[0], y1: mx[1], x2: x, y2: y, class: 'bline ' + cls}, gLn);
+      if (Math.hypot(x - mx[0], y - mx[1]) / u < 110) rbOnAc = true;
+      else { const t = el('text', {x: (mx[0] + x) / 2, y: (mx[1] + y) / 2 - 4 * u, 'text-anchor': 'middle', class: 'blabel ' + cls, 'font-size': 11 * u, 'stroke-width': 3.5 * u}, gLb); t.textContent = rbTxt; } }
+    const g = el('g', {class: 'ac ' + cls, transform: `translate(${x} ${y}) scale(${u})`}, gA);
+    const rot = a.track ?? a.true_heading ?? 0;
+    if (a.gs && a.track != null && a.alt_baro !== 'ground') { const L = Math.min(60, a.gs / 60 * 1 * S / 60 / u); // 1-minute vector, capped
+      el('path', {d: `M0,0L${Math.sin(rot * D2R) * L},${-Math.cos(rot * D2R) * L}`, class: 'vec'}, g); }
+    el('path', {d: 'M0,-9L6,7L0,4L-6,7Z', class: 'body', transform: `rotate(${rot})`}, g);
+    const vs = a.baro_rate ?? a.geom_rate, arrow = vs > 300 ? '↑' : vs < -300 ? '↓' : '';
+    const t1 = el('text', {x: 10, y: -2}, g); t1.textContent = id;
+    const t2 = el('text', {x: 10, y: 10}, g); t2.textContent = `${fmtAlt(a.alt_baro)}${arrow} ${a.t || ''}`.trim();
+    if (rbOnAc) { const t3 = el('text', {x: 10, y: 22}, g); t3.textContent = rbTxt; }
+  });
+  // list
+  rows.sort((p, q) => (p.rb ? p.rb[0] : 0) - (q.rb ? q.rb[0] : 0));
+  $('rows').innerHTML = rows.slice(0, 40).map((r, i) => { const a = r.a, rel = me && me.altFt != null && typeof a.alt_baro === 'number' ? Math.round((a.alt_baro - me.altFt) / 100) : null;
+    return `<tr class="${r.cls}" data-i="${i}"><td class="id">${esc(r.id)}<span class="t">${esc([a.t, a.r && a.r !== r.id ? a.r : ''].filter(Boolean).join(' · '))}</span></td>
+    <td class="rng">${r.rb ? `${r.rb[0] < 10 ? r.rb[0].toFixed(1) : Math.round(r.rb[0])} NM<span class="t">${String(Math.round(r.rb[1]) % 360).padStart(3, '0')}°T</span>` : '—'}</td>
+    <td>${fmtAlt(a.alt_baro)}${typeof a.alt_baro === 'number' ? ' ft' : ''}<span class="t">${rel != null ? (rel >= 0 ? '+' : '') + rel * 100 + ' ft rel' : ''}</span></td>
+    <td>${a.gs != null ? Math.round(a.gs) + ' kt' : '—'}<span class="t">${a.track != null ? String(Math.round(a.track)).padStart(3, '0') + '°' : ''}</span></td>
+    <td>${Math.round(r.n.age)} s</td></tr>`; }).join('');
+  $('rows').querySelectorAll('tr').forEach(tr => tr.onclick = () => { const r = rows[+tr.dataset.i]; setFollow(false); centerOn(r.n.lat, r.n.lon); });
+  $('count').textContent = `${rows.length} aircraft within ${opt.radius} NM`;
+  // status
+  const age = fetchedAt ? Math.round((Date.now() - fetchedAt) / 1000) : null;
+  $('feedage').textContent = fetchedAt ? `${feedName} · ${age} s ago` : '';
+  const gps = me ? `GPS ±${Math.round(me.acc)} m${me.altFt != null ? ' · ' + Math.round(me.altFt) + ' ft MSL' : ''}` : 'No GPS fix';
+  $('st').innerHTML = `${gps}${feedErr && (!fetchedAt || age > 15) ? ` · <span class="warn">Feed error: ${esc(feedErr)}</span>` : age > 20 ? ` · <span class="warn">Traffic ${age} s old</span>` : ''}`;
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+setInterval(() => { if (AC.length || me) draw(); }, 1000);
+requestAnimationFrame(() => { if (!firstFix) centerOn(27.7723, -97.5024, 30); });
+</script>
+</body>
+</html>
