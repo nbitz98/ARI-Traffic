@@ -190,7 +190,7 @@ setTimeout(() => { if (!firstFix) startNoFix(); }, 8000);
 
 // ---- traffic feed (airplanes.live; adsb.lol as backup, same response format)
 // Browsers block direct calls to the public ADS-B APIs (no CORS headers), so the page goes through a small relay first.
-const RELAY = '';  // set to the Cloudflare Worker address, e.g. https://ari-traffic.<name>.workers.dev
+const RELAY = 'https://ari-traffic.natebitz.workers.dev';  // set to the Cloudflare Worker address, e.g. https://ari-traffic.<name>.workers.dev
 const FEEDS = [
   ...(RELAY ? [{name: 'relay', url: (la, lo, r) => `${RELAY.replace(/\/$/, '')}/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`}] : []),
   {name: 'airplanes.live', url: (la, lo, r) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
