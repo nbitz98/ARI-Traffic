@@ -5,7 +5,6 @@
 //   FR24_TOKEN  (type: Secret)  your FR24 API key (sandbox key or live key)
 //   FR24_MODE   (type: Text)    "sandbox" for FR24's static test data, or "live" for real traffic
 const ALLOWED_ORIGIN = 'https://nbitz98.github.io';
-const BASE = 'https://fr24api.flightradar24.com/api';
 
 export default {
   async fetch(request, env) {
@@ -22,7 +21,7 @@ async function handle(request, env) {
     const cors = {
       'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Expose-Headers': 'X-Feed',
+      'Access-Control-Expose-Headers': 'X-Feed, X-FR24-Path',
       'Vary': 'Origin',
     };
     if (request.method === 'OPTIONS') return new Response(null, {headers: cors});
@@ -34,13 +33,22 @@ async function handle(request, env) {
     const dLat = nm / 60, dLon = nm / (60 * Math.cos(lat * Math.PI / 180));
     const bounds = [lat + dLat, lat - dLat, lon - dLon, lon + dLon].map(v => v.toFixed(3)).join(',');  // north,south,west,east
     const mode = (env.FR24_MODE || 'sandbox').toLowerCase() === 'live' ? 'live' : 'sandbox';
-    const path = (mode === 'sandbox' ? '/sandbox' : '') + '/live/flight-positions/light';
-
-    const up = await fetch(`${BASE}${path}?bounds=${bounds}&limit=200`, {
-      headers: {'Authorization': `Bearer ${String(env.FR24_TOKEN).trim()}`, 'Accept': 'application/json', 'Accept-Version': 'v1'},
-    });
-    const text = await up.text();
-    if (!up.ok) return new Response(`FR24 ${mode}: HTTP ${up.status} ${text.slice(0, 200)}`, {status: 502, headers: cors});
+    // FR24's docs say to "prepend sandbox" to the endpoint without showing the exact form,
+    // so in sandbox mode try the likely forms in turn and use the first that exists.
+    const paths = mode === 'live' ? ['/api/live/flight-positions/light'] : [
+      '/api/sandbox/live/flight-positions/light', '/api/sandbox/live/flight-positions/full',
+      '/sandbox/api/live/flight-positions/light', '/sandbox/api/live/flight-positions/full',
+      '/api/live/flight-positions/light/sandbox', '/sandbox/live/flight-positions/light',
+    ];
+    const headers = {'Authorization': `Bearer ${String(env.FR24_TOKEN).trim()}`, 'Accept': 'application/json', 'Accept-Version': 'v1'};
+    let up, text, used; const tried = [];
+    for (const p of paths) {
+      up = await fetch(`https://fr24api.flightradar24.com${p}?bounds=${bounds}&limit=200`, {headers});
+      text = await up.text(); used = p;
+      if (up.status !== 404) break;
+      tried.push(`${p}: 404`);
+    }
+    if (!up.ok) return new Response(`FR24 ${mode}: HTTP ${up.status} at ${used} ${text.slice(0, 200)}${tried.length ? ' | tried ' + tried.join(', ') : ''}`, {status: 502, headers: cors});
 
     // Convert FR24 records to the field names the page uses
     let data; try { data = JSON.parse(text).data || []; } catch (e) { return new Response('FR24 returned unreadable data', {status: 502, headers: cors}); }
@@ -55,8 +63,8 @@ async function handle(request, env) {
         seen_pos: isFinite(ts) ? Math.max(0, (now - ts) / 1000) : 0,
       };
     });
-    return new Response(JSON.stringify({ac, now, source: `fr24-${mode}`}), {
-      headers: {...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Feed': `Flightradar24${mode === 'sandbox' ? ' sandbox' : ''}`},
+    return new Response(JSON.stringify({ac, now, source: `fr24-${mode}`, path: used}), {
+      headers: {...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Feed': `Flightradar24${mode === 'sandbox' ? ' sandbox' : ''}`, 'X-FR24-Path': used},
     });
   }
 }
