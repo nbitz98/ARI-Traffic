@@ -189,7 +189,10 @@ function startNoFix() { if (noFixStarted || firstFix) return; noFixStarted = tru
 setTimeout(() => { if (!firstFix) startNoFix(); }, 8000);
 
 // ---- traffic feed (airplanes.live; adsb.lol as backup, same response format)
+// Browsers block direct calls to the public ADS-B APIs (no CORS headers), so the page goes through a small relay first.
+const RELAY = '';  // set to the Cloudflare Worker address, e.g. https://ari-traffic.<name>.workers.dev
 const FEEDS = [
+  ...(RELAY ? [{name: 'relay', url: (la, lo, r) => `${RELAY.replace(/\/$/, '')}/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`}] : []),
   {name: 'airplanes.live', url: (la, lo, r) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
   {name: 'adsb.lol', url: (la, lo, r) => `https://api.adsb.lol/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
 ];
@@ -199,14 +202,15 @@ async function poll(now) {
   clearTimeout(timer); if (busy) { timer = setTimeout(poll, 1000); return; }
   if (document.hidden) { timer = setTimeout(poll, 5000); return; }
   if (!firstFix && !noFixStarted) { timer = setTimeout(poll, 1000); return; }
-  busy = true; const [la, lo] = queryPoint();
+  busy = true; const [la, lo] = queryPoint(); const errs = [];
   for (let tries = 0; tries < FEEDS.length; tries++) { const f = FEEDS[feedIdx];
     try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
       const r = await fetch(f.url(la, lo, opt.radius), {signal: ctl.signal, cache: 'no-store'}); clearTimeout(to);
-      if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); fetchedAt = Date.now(); feedErr = ''; feedName = f.name;
+      if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); fetchedAt = Date.now(); feedErr = ''; feedName = f.name === 'relay' ? (r.headers.get('X-Feed') || 'relay') : f.name;
       AC = (j.ac || j.aircraft || []).filter(a => isFinite(a.lat) && isFinite(a.lon)).map(a => ({...a, _t: fetchedAt}));
       break; }
-    catch (e) { feedErr = `${f.name}: ${e.name === 'AbortError' ? 'timed out' : e.message}`; feedIdx = (feedIdx + 1) % FEEDS.length; } }
+    catch (e) { errs.push(`${f.name}: ${e.name === 'AbortError' ? 'timed out' : e.message}`); feedErr = errs.join('; '); feedIdx = (feedIdx + 1) % FEEDS.length; } }
+  if (!feedErr) feedIdx = 0;
   busy = false; draw(); timer = setTimeout(poll, 5000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });
