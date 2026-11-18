@@ -37,7 +37,7 @@ async function handle(request, env) {
     const path = (mode === 'sandbox' ? '/sandbox' : '') + '/live/flight-positions/light';
 
     const up = await fetch(`${BASE}${path}?bounds=${bounds}&limit=200`, {
-      headers: {'Authorization': `Bearer ${env.FR24_TOKEN}`, 'Accept': 'application/json', 'Accept-Version': 'v1'},
+      headers: {'Authorization': `Bearer ${String(env.FR24_TOKEN).trim()}`, 'Accept': 'application/json', 'Accept-Version': 'v1'},
     });
     const text = await up.text();
     if (!up.ok) return new Response(`FR24 ${mode}: HTTP ${up.status} ${text.slice(0, 200)}`, {status: 502, headers: cors});
