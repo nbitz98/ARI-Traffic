@@ -9,6 +9,16 @@ const BASE = 'https://fr24api.flightradar24.com/api';
 
 export default {
   async fetch(request, env) {
+    try { return await handle(request, env); }
+    catch (e) {
+      // Any unexpected failure still answers with CORS headers, so the page can show the reason
+      return new Response(`Relay error: ${e && e.message || e}`, {status: 500, headers: {'Access-Control-Allow-Origin': ALLOWED_ORIGIN, 'Vary': 'Origin'}});
+    }
+  },
+};
+
+async function handle(request, env) {
+  {
     const cors = {
       'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -48,5 +58,5 @@ export default {
     return new Response(JSON.stringify({ac, now, source: `fr24-${mode}`}), {
       headers: {...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Feed': `Flightradar24${mode === 'sandbox' ? ' sandbox' : ''}`},
     });
-  },
-};
+  }
+}
