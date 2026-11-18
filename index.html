@@ -101,7 +101,7 @@ tr{cursor:pointer}
       <label><input type="checkbox" id="wake"> Keep screen on</label>
     </div>
     <div class="list"><table><thead><tr><th>Aircraft</th><th>Range / brg</th><th>Altitude</th><th>Speed</th><th>Age</th></tr></thead><tbody id="rows"></tbody></table>
-    <p class="note">Planning and awareness aid only, not for navigation or collision avoidance. Internet ADS-B data is delayed, thin at low altitude, and does not show aircraft that are not broadcasting. Positions are projected forward from the last report for up to 15 s. Bearings are true. Altitudes are pressure altitude from the aircraft. Red: within 3 NM and 2,000 ft of you; amber: within 6 NM. Aircraft data: <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a>. Chart: FAA sectionals, 29 Oct&ndash;24 Dec 2026.</p></div>
+    <p class="note">Planning and awareness aid only, not for navigation or collision avoidance. Internet ADS-B data is delayed, thin at low altitude, and does not show aircraft that are not broadcasting. Positions are projected forward from the last report for up to 15 s. Bearings are true. Altitudes are pressure altitude from the aircraft. Red: within 3 NM and 2,000 ft of you; amber: within 6 NM. Aircraft data: <a href="https://www.flightradar24.com" target="_blank" rel="noopener">Flightradar24</a>, refreshed every 10 s. Chart: FAA sectionals, 29 Oct&ndash;24 Dec 2026.</p></div>
   </div>
 </div>
 <script>
@@ -193,8 +193,6 @@ setTimeout(() => { if (!firstFix) startNoFix(); }, 8000);
 const RELAY = 'https://ari-traffic.natebitz.workers.dev';  // set to the Cloudflare Worker address, e.g. https://ari-traffic.<name>.workers.dev
 const FEEDS = [
   ...(RELAY ? [{name: 'relay', url: (la, lo, r) => `${RELAY.replace(/\/$/, '')}/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`}] : []),
-  {name: 'airplanes.live', url: (la, lo, r) => `https://api.airplanes.live/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
-  {name: 'adsb.lol', url: (la, lo, r) => `https://api.adsb.lol/v2/point/${la.toFixed(4)}/${lo.toFixed(4)}/${r}`},
 ];
 let feedIdx = 0, timer = null, busy = false;
 function queryPoint() { if (me) return [me.lat, me.lon]; const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2; return [-cy / S, cx / (K * S)]; }
@@ -211,7 +209,7 @@ async function poll(now) {
       break; }
     catch (e) { errs.push(`${f.name}: ${e.name === 'AbortError' ? 'timed out' : e.message}`); feedErr = errs.join('; '); feedIdx = (feedIdx + 1) % FEEDS.length; } }
   if (!feedErr) feedIdx = 0;
-  busy = false; draw(); timer = setTimeout(poll, 5000);
+  busy = false; draw(); timer = setTimeout(poll, 10000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });
 
